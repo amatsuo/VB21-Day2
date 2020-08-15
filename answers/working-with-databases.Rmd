@@ -1,0 +1,135 @@
+---
+title: "Using database"
+author: ""
+date: "8/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Connect to the database
+
+- Now let's use the databases
+- First connect to the database
+
+```{r}
+library(DBI)
+library(tidyverse)
+
+db <- dbConnect(RSQLite::SQLite(), "~/covid.sqlite")
+```
+
+## Run queries
+
+### Get sample rows from each table 
+
+- Get sample rows from each table
+- Use `dbGetQuery()`
+  - Run SQL queries there
+
+```{r}
+dbGetQuery(db, "select * from covid limit 5")
+dbGetQuery(db, "select * from demo limit 5")
+dbGetQuery(db, "select * from trump limit 5")
+```
+
+
+### Bit more complex queries
+
+1. Get the latest data for each county
+2. Get the data on 1 Aug, 2020, and select county with more than 10 deaths
+
+```{r}
+dbGetQuery(db, "select * from covid where date = '2020-08-08'" )
+dbGetQuery(db, "select * from covid where date = '2020-08-01' and deaths > 10" )
+
+```
+#### Ordering and aggregation
+
+1. Order counties with the highest number of death
+2. Calculate the state level death figures
+
+
+```{r}
+dbGetQuery(db, "select * from covid where date = '2020-08-08' order by deaths desc" )
+dbGetQuery(db, "select state, sum(deaths) from covid where date = '2020-08-08' group by state" )
+```
+
+
+### Merging tables
+
+- merge covid and demo table by fips
+- (advanced) calculate per 1000 cases and deaths
+
+```{r}
+dbGetQuery(db, "select covid.*, demo.* from covid inner join demo on covid.fips = demo.fips")
+dbGetQuery(db, "select covid.*, demo.*, covid.deaths / demo.totalPop as deaths_per1000  from covid inner join demo on covid.fips = demo.fips")
+```
+
+## dblyr
+
+Now we will use `dbplyr`
+
+### Get the object for each table
+
+```{r}
+tb_covid <- tbl(db, "covid")
+tb_demo <- tbl(db, "demo")
+```
+
+
+### Let's check the same thing we did:
+
+
+#### Get sample rows from each table 
+
+- Get sample rows from each table
+- Use `dbGetQuery()`
+  - Run SQL queries there
+
+```{r}
+tb_covid %>% head(5)
+tb_demo %>% head(5)
+```
+
+
+#### Bit more complex queries
+
+1. Get the latest data for each county
+2. Get the data on 1 Aug, 2020, and select county with more than 10 deaths
+
+```{r}
+tb_covid %>% filter(date == "2020-08-08")
+tb_covid %>% filter(date == "2020-08-01") %>%
+  filter(deaths > 10)
+
+```
+#### Ordering and aggregation
+
+1. Order counties with the highest number of death
+2. Calculate the state level death figures
+
+
+```{r}
+tb_covid %>%
+  filter(date == '2020-08-08') %>% 
+  arrange(desc(deaths))
+tb_covid %>%
+  filter(date == '2020-08-08') %>% 
+  group_by(state) %>% summarize(tot_deaths = sum(deaths))
+ 
+```
+
+
+### Merging tables
+
+- merge covid and demo table by fips
+- calculate per 1000 cases and deaths
+
+
+```{r}
+tb_covid %>% left_join(tb_demo, by = "fips") %>%
+  mutate(deaths_per1000 = deaths/TotalPop) 
+```
